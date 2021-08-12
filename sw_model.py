@@ -1,20 +1,28 @@
 import sys
 import os
-import numpy as np
 import cv2
-import threading
-
+import numpy as np
+import dlib
 
 from PyQt5 import uic
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 
+from model.mobilenetv1 import MobileNetV1
+from model.ssd import SSD, Predictor
+
+import torch
+
+from util import *
 
 
 
 main_ui = uic.loadUiType('sw_window.ui')[0]
 fourcc = cv2.VideoWriter_fourcc(*'DIVX')
+
+pth_path = 'ssd-mobilev1-face-2134_0.0192.pth'
+dat_path = 'shape_predictor_68_face_landmarks.dat'
 
 
 class MyApp(QMainWindow, main_ui):
@@ -24,9 +32,14 @@ class MyApp(QMainWindow, main_ui):
         self.initUI()
 
         # 변수 초기화
-        self.init_dir = './'
+        self.init_dir = '../../'
         self.video_path = []
 
+        self.face_detector = face_detector_loader(pth_path)
+        self.land_detector = dlib.shape_predictor(dat_path)
+        self.cur_bbox = None
+
+        # pyqt
         self.cam_num =0
         self.cap = None
         self.press_esc = False
@@ -34,6 +47,8 @@ class MyApp(QMainWindow, main_ui):
         self.get_video = False
         self.get_cam = False
         self.change_cam = False
+        self.face_check = None
+        self.land_check = None
 
         # 버튼에 기능 연결
         self.cam_comboBox.currentIndexChanged.connect(self.camSetting_combo) # 캠 번호
@@ -43,7 +58,22 @@ class MyApp(QMainWindow, main_ui):
         self.video_listWidget.itemDoubleClicked.connect(self.selectVideo) # 비디오 리스트 중 선택
         self.videoplay_pushButton.clicked.connect(self.Video_button) # 비디오 재생/정지 버튼
 
+        self.face_checkBox.stateChanged.connect(self.check_face)
+        self.land_checkBox.stateChanged.connect(self.check_land)
+
         self.exit_Button.clicked.connect(self.prgram_exit) # 종료 버튼
+
+    def check_face(self):
+        if self.face_checkBox.isChecked():
+            return True
+        else:
+            return False
+
+    def check_land(self):
+        if self.land_checkBox.isChecked():
+            return True
+        else:
+            return False
 
     def initUI(self):
         self.setWindowTitle('1-stage detection')
@@ -80,11 +110,39 @@ class MyApp(QMainWindow, main_ui):
 
     def startCamera(self):
         self.get_cam = True
+
         if self.cap:
+            face_detect, land_detect = False, False
+            prev_bbox, prev_land = [], []
             while True:
                 self.ret, self.frame = self.cap.read()
                 if self.ret:
-                    print('1')
+                    boxes, labels, probs, sec1 = get_face(self.face_detector, self.frame)
+
+                    if boxes.size(0) and probs[0] > 0.5:
+                        '''detect face'''
+                        box = boxes[0, :]
+                        label = f"Face: {probs[0]:.2f}"
+                        self.cur_bbox = add_face_region(box)
+                        self.cur_bbox, prev_bbox, face_detect = low_pass_filter(self.cur_bbox, prev_bbox, face_detect,
+                                                                                mode='face')
+                        x1, x2, y1, y2 = self.cur_bbox
+
+                        '''detect landmark'''
+                        face_box = dlib.rectangle(left=self.cur_bbox[0], top=self.cur_bbox[2], right=self.cur_bbox[1],
+                                                  bottom=self.cur_bbox[3])
+                        cur_land = self.land_detector(self.frame, face_box)
+
+                        if self.check_face() == True:
+                            self.frame = cv2.rectangle(self.frame, (x1, y1), (x2, y2), (128, 0, 255), 4)
+                            self.frame = cv2.putText(self.frame, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                                     (255, 255, 255), 2)
+
+                        if self.check_land() == True:
+                            for i in range(68):
+                                x, y = cur_land.part(i).x, cur_land.part(i).y
+                                cv2.circle(self.frame, (x, y), 1, (0, 0, 255), -1)
+
                     self.showImage(self.frame, self.display_label)
                     cv2.waitKey(1)
 
@@ -92,9 +150,9 @@ class MyApp(QMainWindow, main_ui):
                     if self.press_esc or self.get_video or self.change_cam:
                         self.cap.release()
                         break
-
                 else:
                     break
+
         self.cap.release()
 
     def getVideo_button(self):
@@ -138,8 +196,10 @@ class MyApp(QMainWindow, main_ui):
                 if self.ret and not self.video_frame:
                     self.showImage(self.frame, self.display_label)
                     cv2.waitKey(1)
+
                 elif self.ret:
                     break
+
                 # cam이 눌리면 stop
                 elif self.press_esc or self.get_cam:
                     self.cap.release()
