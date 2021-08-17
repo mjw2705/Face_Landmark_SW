@@ -9,14 +9,9 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 
-from model.mobilenetv1 import MobileNetV1
-from model.ssd import SSD, Predictor
-
 import torch
 
 from util import *
-
-
 
 main_ui = uic.loadUiType('sw_window.ui')[0]
 fourcc = cv2.VideoWriter_fourcc(*'DIVX')
@@ -37,10 +32,9 @@ class MyApp(QMainWindow, main_ui):
 
         self.face_detector = face_detector_loader(pth_path)
         self.land_detector = dlib.shape_predictor(dat_path)
-        self.cur_bbox = None
 
         # pyqt
-        self.cam_num =0
+        self.cam_num = 0
         self.cap = None
         self.press_esc = False
         self.video_frame = False
@@ -51,17 +45,17 @@ class MyApp(QMainWindow, main_ui):
         self.land_check = None
 
         # 버튼에 기능 연결
-        self.cam_comboBox.currentIndexChanged.connect(self.camSetting_combo) # 캠 번호
-        self.cam_pushButton.clicked.connect(self.camSetting_button) # 캠 선택 버튼
-        self.cam_message = QMessageBox() # 캠 메시지
-        self.video_pushButton.clicked.connect(self.getVideo_button) # 비디오 선택 버튼
-        self.video_listWidget.itemDoubleClicked.connect(self.selectVideo) # 비디오 리스트 중 선택
-        self.videoplay_pushButton.clicked.connect(self.Video_button) # 비디오 재생/정지 버튼
+        self.cam_comboBox.currentIndexChanged.connect(self.camSetting_combo)  # 캠 번호
+        self.cam_pushButton.clicked.connect(self.camSetting_button)  # 캠 선택 버튼
+        self.cam_message = QMessageBox()  # 캠 메시지
+        self.video_pushButton.clicked.connect(self.getVideo_button)  # 비디오 선택 버튼
+        self.video_listWidget.itemDoubleClicked.connect(self.selectVideo)  # 비디오 리스트 중 선택
+        self.videoplay_pushButton.clicked.connect(self.Video_button)  # 비디오 재생/정지 버튼
 
         self.face_checkBox.stateChanged.connect(self.check_face)
         self.land_checkBox.stateChanged.connect(self.check_land)
 
-        self.exit_Button.clicked.connect(self.prgram_exit) # 종료 버튼
+        self.exit_Button.clicked.connect(self.prgram_exit)  # 종료 버튼
 
     def check_face(self):
         if self.face_checkBox.isChecked():
@@ -117,20 +111,20 @@ class MyApp(QMainWindow, main_ui):
             while True:
                 self.ret, self.frame = self.cap.read()
                 if self.ret:
-                    boxes, labels, probs, sec1 = get_face(self.face_detector, self.frame)
+                    boxes, labels, probs, sec1 = get_face(self.face_detector, self.frame, self.display_label)
 
                     if boxes.size(0) and probs[0] > 0.5:
                         '''detect face'''
                         box = boxes[0, :]
                         label = f"Face: {probs[0]:.2f}"
-                        self.cur_bbox = add_face_region(box)
-                        self.cur_bbox, prev_bbox, face_detect = low_pass_filter(self.cur_bbox, prev_bbox, face_detect,
-                                                                                mode='face')
-                        x1, x2, y1, y2 = self.cur_bbox
+                        cur_bbox = add_face_region(box)
+                        cur_bbox, prev_bbox, face_detect = low_pass_filter(cur_bbox, prev_bbox, face_detect,
+                                                                           mode='face')
+                        x1, x2, y1, y2 = cur_bbox
 
                         '''detect landmark'''
-                        face_box = dlib.rectangle(left=self.cur_bbox[0], top=self.cur_bbox[2], right=self.cur_bbox[1],
-                                                  bottom=self.cur_bbox[3])
+                        face_box = dlib.rectangle(left=cur_bbox[0], top=cur_bbox[2], right=cur_bbox[1],
+                                                  bottom=cur_bbox[3])
                         cur_land = self.land_detector(self.frame, face_box)
 
                         if self.check_face() == True:
@@ -190,10 +184,39 @@ class MyApp(QMainWindow, main_ui):
 
     def startVideo(self):
         if self.cap:
+            face_detect, land_detect = False, False
+            prev_bbox, prev_land = [], []
+
             while True:
                 self.ret, self.frame = self.cap.read()
 
                 if self.ret and not self.video_frame:
+                    boxes, labels, probs, sec1 = get_face(self.face_detector, self.frame, self.display_label)
+
+                    if boxes.size(0) and probs[0] > 0.5:
+                        '''detect face'''
+                        box = boxes[0, :]
+                        label = f"Face: {probs[0]:.2f}"
+                        cur_bbox = add_face_region(box)
+                        cur_bbox, prev_bbox, face_detect = low_pass_filter(cur_bbox, prev_bbox, face_detect,
+                                                                           mode='face')
+                        x1, x2, y1, y2 = cur_bbox
+
+                        '''detect landmark'''
+                        face_box = dlib.rectangle(left=cur_bbox[0], top=cur_bbox[2], right=cur_bbox[1],
+                                                  bottom=cur_bbox[3])
+                        cur_land = self.land_detector(self.frame, face_box)
+
+                        if self.check_face() == True:
+                            self.frame = cv2.rectangle(self.frame, (x1, y1), (x2, y2), (128, 0, 255), 4)
+                            self.frame = cv2.putText(self.frame, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                                     (255, 255, 255), 2)
+
+                        if self.check_land() == True:
+                            for i in range(68):
+                                x, y = cur_land.part(i).x, cur_land.part(i).y
+                                cv2.circle(self.frame, (x, y), 2, (0, 0, 255), -1)
+
                     self.showImage(self.frame, self.display_label)
                     cv2.waitKey(1)
 
