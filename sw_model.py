@@ -205,6 +205,9 @@ class MyApp(QMainWindow, main_ui):
                     self.cap.release()
                     break
 
+                else:
+                    break
+
     def showImage(self, img, display_label):
         draw_img = img.copy()
         height = display_label.height()
