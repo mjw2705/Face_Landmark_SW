@@ -13,6 +13,8 @@ import torch
 
 from util import *
 
+
+
 main_ui = uic.loadUiType('sw_window.ui')[0]
 fourcc = cv2.VideoWriter_fourcc(*'DIVX')
 
@@ -111,31 +113,7 @@ class MyApp(QMainWindow, main_ui):
             while True:
                 self.ret, self.frame = self.cap.read()
                 if self.ret:
-                    boxes, labels, probs, sec1 = get_face(self.face_detector, self.frame, self.display_label)
-
-                    if boxes.size(0) and probs[0] > 0.5:
-                        '''detect face'''
-                        box = boxes[0, :]
-                        label = f"Face: {probs[0]:.2f}"
-                        cur_bbox = add_face_region(box)
-                        cur_bbox, prev_bbox, face_detect = low_pass_filter(cur_bbox, prev_bbox, face_detect,
-                                                                           mode='face')
-                        x1, x2, y1, y2 = cur_bbox
-
-                        '''detect landmark'''
-                        face_box = dlib.rectangle(left=cur_bbox[0], top=cur_bbox[2], right=cur_bbox[1],
-                                                  bottom=cur_bbox[3])
-                        cur_land = self.land_detector(self.frame, face_box)
-
-                        if self.check_face() == True:
-                            self.frame = cv2.rectangle(self.frame, (x1, y1), (x2, y2), (128, 0, 255), 4)
-                            self.frame = cv2.putText(self.frame, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                                                     (255, 255, 255), 2)
-
-                        if self.check_land() == True:
-                            for i in range(68):
-                                x, y = cur_land.part(i).x, cur_land.part(i).y
-                                cv2.circle(self.frame, (x, y), 1, (0, 0, 255), -1)
+                    self.detect(self.frame, prev_bbox, face_detect, 1)
 
                     self.showImage(self.frame, self.display_label)
                     cv2.waitKey(1)
@@ -146,8 +124,6 @@ class MyApp(QMainWindow, main_ui):
                         break
                 else:
                     break
-
-        self.cap.release()
 
     def getVideo_button(self):
         self.get_cam = False
@@ -191,31 +167,7 @@ class MyApp(QMainWindow, main_ui):
                 self.ret, self.frame = self.cap.read()
 
                 if self.ret and not self.video_frame:
-                    boxes, labels, probs, sec1 = get_face(self.face_detector, self.frame, self.display_label)
-
-                    if boxes.size(0) and probs[0] > 0.5:
-                        '''detect face'''
-                        box = boxes[0, :]
-                        label = f"Face: {probs[0]:.2f}"
-                        cur_bbox = add_face_region(box)
-                        cur_bbox, prev_bbox, face_detect = low_pass_filter(cur_bbox, prev_bbox, face_detect,
-                                                                           mode='face')
-                        x1, x2, y1, y2 = cur_bbox
-
-                        '''detect landmark'''
-                        face_box = dlib.rectangle(left=cur_bbox[0], top=cur_bbox[2], right=cur_bbox[1],
-                                                  bottom=cur_bbox[3])
-                        cur_land = self.land_detector(self.frame, face_box)
-
-                        if self.check_face() == True:
-                            self.frame = cv2.rectangle(self.frame, (x1, y1), (x2, y2), (128, 0, 255), 4)
-                            self.frame = cv2.putText(self.frame, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                                                     (255, 255, 255), 2)
-
-                        if self.check_land() == True:
-                            for i in range(68):
-                                x, y = cur_land.part(i).x, cur_land.part(i).y
-                                cv2.circle(self.frame, (x, y), 2, (0, 0, 255), -1)
+                    self.detect(self.frame, prev_bbox, face_detect, 2)
 
                     self.showImage(self.frame, self.display_label)
                     cv2.waitKey(1)
@@ -230,6 +182,33 @@ class MyApp(QMainWindow, main_ui):
 
                 else:
                     break
+
+    def detect(self, frame, prev_bbox, face_detect, thick):
+        boxes, labels, probs, sec1 = get_face(self.face_detector, frame, self.display_label)
+
+        if boxes.size(0) and probs[0] > 0.5:
+            '''detect face'''
+            box = boxes[0, :]
+            label = f"Face: {probs[0]:.2f}"
+            cur_bbox = add_face_region(box)
+            cur_bbox, prev_bbox, face_detect = low_pass_filter(cur_bbox, prev_bbox, face_detect,
+                                                               mode='face')
+            x1, x2, y1, y2 = cur_bbox
+
+            '''detect landmark'''
+            face_box = dlib.rectangle(left=cur_bbox[0], top=cur_bbox[2], right=cur_bbox[1],
+                                      bottom=cur_bbox[3])
+            cur_land = self.land_detector(self.frame, face_box)
+
+            if self.check_face() == True:
+                frame = cv2.rectangle(frame, (x1, y1), (x2, y2), (128, 0, 255), 4)
+                frame = cv2.putText(frame, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                    (255, 255, 255), 2)
+
+            if self.check_land() == True:
+                for i in range(68):
+                    x, y = cur_land.part(i).x, cur_land.part(i).y
+                    cv2.circle(frame, (x, y), thick, (0, 0, 255), -1)
 
     def showImage(self, img, display_label):
         draw_img = img.copy()
