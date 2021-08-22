@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>995</width>
-    <height>757</height>
+    <width>1107</width>
+    <height>847</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,10 +17,10 @@
    <widget class="QGroupBox" name="groupBox">
     <property name="geometry">
      <rect>
-      <x>750</x>
-      <y>340</y>
+      <x>820</x>
+      <y>320</y>
       <width>211</width>
-      <height>151</height>
+      <height>181</height>
      </rect>
     </property>
     <property name="font">
@@ -83,7 +83,7 @@
      <property name="geometry">
       <rect>
        <x>40</x>
-       <y>110</y>
+       <y>150</y>
        <width>131</width>
        <height>21</height>
       </rect>
@@ -98,12 +98,31 @@
       <string>Eye Tracking</string>
      </property>
     </widget>
+    <widget class="QCheckBox" name="pupil_checkBox">
+     <property name="geometry">
+      <rect>
+       <x>40</x>
+       <y>110</y>
+       <width>131</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>10</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>Pupil Center</string>
+     </property>
+    </widget>
    </widget>
    <widget class="QComboBox" name="cam_comboBox">
     <property name="geometry">
      <rect>
-      <x>780</x>
-      <y>80</y>
+      <x>850</x>
+      <y>70</y>
       <width>91</width>
       <height>21</height>
      </rect>
@@ -114,8 +133,8 @@
      <rect>
       <x>20</x>
       <y>20</y>
-      <width>701</width>
-      <height>701</height>
+      <width>771</width>
+      <height>781</height>
      </rect>
     </property>
     <property name="frameShape">
@@ -128,8 +147,8 @@
    <widget class="QPushButton" name="video_pushButton">
     <property name="geometry">
      <rect>
-      <x>750</x>
-      <y>140</y>
+      <x>820</x>
+      <y>130</y>
       <width>101</width>
       <height>31</height>
      </rect>
@@ -149,8 +168,8 @@
    <widget class="QPushButton" name="cam_pushButton">
     <property name="geometry">
      <rect>
-      <x>890</x>
-      <y>80</y>
+      <x>960</x>
+      <y>70</y>
       <width>71</width>
       <height>31</height>
      </rect>
@@ -168,8 +187,8 @@
    <widget class="QPushButton" name="realtime_pushButton">
     <property name="geometry">
      <rect>
-      <x>750</x>
-      <y>40</y>
+      <x>820</x>
+      <y>30</y>
       <width>101</width>
       <height>31</height>
      </rect>
@@ -187,8 +206,8 @@
    <widget class="QLabel" name="cam_label">
     <property name="geometry">
      <rect>
-      <x>750</x>
-      <y>80</y>
+      <x>820</x>
+      <y>70</y>
       <width>21</width>
       <height>16</height>
      </rect>
@@ -206,10 +225,10 @@
    <widget class="QPushButton" name="exit_Button">
     <property name="geometry">
      <rect>
-      <x>870</x>
-      <y>680</y>
-      <width>91</width>
-      <height>41</height>
+      <x>960</x>
+      <y>750</y>
+      <width>121</width>
+      <height>51</height>
      </rect>
     </property>
     <property name="font">
@@ -225,8 +244,8 @@
    <widget class="QListWidget" name="video_listWidget">
     <property name="geometry">
      <rect>
-      <x>750</x>
-      <y>180</y>
+      <x>820</x>
+      <y>170</y>
       <width>211</width>
       <height>71</height>
      </rect>
@@ -235,8 +254,8 @@
    <widget class="QPushButton" name="videoplay_pushButton">
     <property name="geometry">
      <rect>
-      <x>830</x>
-      <y>260</y>
+      <x>900</x>
+      <y>250</y>
       <width>131</width>
       <height>31</height>
      </rect>
@@ -249,6 +268,129 @@
     </property>
     <property name="text">
      <string>Video 재생/중지</string>
+    </property>
+   </widget>
+   <widget class="QSlider" name="thres_horizontalSlider">
+    <property name="geometry">
+     <rect>
+      <x>930</x>
+      <y>540</y>
+      <width>160</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="orientation">
+     <enum>Qt::Horizontal</enum>
+    </property>
+   </widget>
+   <widget class="QSlider" name="landthres_horizontalSlider">
+    <property name="geometry">
+     <rect>
+      <x>930</x>
+      <y>580</y>
+      <width>160</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="orientation">
+     <enum>Qt::Horizontal</enum>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="cali_pushButton">
+    <property name="geometry">
+     <rect>
+      <x>950</x>
+      <y>620</y>
+      <width>121</width>
+      <height>61</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>10</pointsize>
+      <weight>50</weight>
+      <bold>false</bold>
+     </font>
+    </property>
+    <property name="text">
+     <string>calibration</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label">
+    <property name="geometry">
+     <rect>
+      <x>820</x>
+      <y>540</y>
+      <width>71</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>9</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>threshold</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_2">
+    <property name="geometry">
+     <rect>
+      <x>820</x>
+      <y>580</y>
+      <width>71</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>9</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>land_thres</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="thres_label">
+    <property name="geometry">
+     <rect>
+      <x>890</x>
+      <y>540</y>
+      <width>31</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>10</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string/>
+    </property>
+   </widget>
+   <widget class="QLabel" name="land_label">
+    <property name="geometry">
+     <rect>
+      <x>900</x>
+      <y>580</y>
+      <width>21</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+      <pointsize>10</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string/>
     </property>
    </widget>
   </widget>
