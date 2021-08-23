@@ -45,8 +45,10 @@ class MyApp(QMainWindow, main_ui):
         self.change_cam = False
         self.face_check = None
         self.land_check = None
+        self.calibration = False
         self.threshold = 0
         self.land_thres = 0
+        self.click_pt = []
 
         # 버튼에 기능 연결
         self.cam_comboBox.currentIndexChanged.connect(self.camSetting_combo) # 캠 번호
@@ -55,7 +57,7 @@ class MyApp(QMainWindow, main_ui):
         self.video_pushButton.clicked.connect(self.getVideo_button) # 비디오 선택 버튼
         self.video_listWidget.itemDoubleClicked.connect(self.selectVideo) # 비디오 리스트 중 선택
         self.videoplay_pushButton.clicked.connect(self.Video_button) # 비디오 재생/정지 버튼
-        # self.cali_pushButton.clicked.connect() # calibration 버튼
+        self.cali_pushButton.clicked.connect(self.calibration_button) # calibration 버튼
 
         # 체크박스
         self.face_checkBox.stateChanged.connect(self.check_face)
@@ -72,7 +74,7 @@ class MyApp(QMainWindow, main_ui):
         self.thres_horizontalSlider.valueChanged.connect(self.thres_slider)
         self.landthres_horizontalSlider.valueChanged.connect(self.landthres_slider)
 
-        self.exit_Button.clicked.connect(self.prgram_exit) # 종료 버튼
+        self.exit_Button.clicked.connect(self.program_exit) # 종료 버튼
 
     def thres_slider(self):
         self.threshold = self.thres_horizontalSlider.value()
@@ -81,6 +83,14 @@ class MyApp(QMainWindow, main_ui):
     def landthres_slider(self):
         self.land_thres = self.landthres_horizontalSlider.value()
         self.land_label.setText(str(self.land_thres))
+
+    def click_event(self, event, x, y, flags, param):
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.click_pt = [x, y]
+
+    def calibration_button(self):
+        self.calibration = True
 
     def check_face(self):
         if self.face_checkBox.isChecked():
@@ -133,16 +143,70 @@ class MyApp(QMainWindow, main_ui):
             self.startCamera()
             print('camera stop')
 
+
     def startCamera(self):
         self.get_cam = True
 
         if self.cap:
             face_detect, land_detect = False, False
             prev_bbox, prev_land = [], []
+            n_point, i, j = 0, 0, 0
+
             while True:
                 self.ret, self.frame = self.cap.read()
                 if self.ret:
-                    self.detect(self.frame, prev_bbox, face_detect, prev_land, land_detect, 1)
+                    boxes, labels, probs, sec1 = get_face(self.face_detector, self.frame)
+
+                    if boxes.size(0):
+                        abs_land, l_center, r_center = self.detect(boxes, probs, self.frame, prev_bbox, face_detect, prev_land, land_detect, 1)
+
+                    if self.calibration == True:
+                        if j >= int(points[n_point] ** 0.5):
+                            j = 0
+                            n_point += 1
+                            if n_point > 2:
+                                cv2.destroyAllWindows()
+                        if i >= int(points[n_point] ** 0.5):
+                            i = 0
+                            j += 1
+
+                        whiteboard = np.ones((480, 640, 3))
+
+                        w_interval = (640 // (points[n_point] ** 0.5 - 1))
+                        h_interval = (480 // (points[n_point] ** 0.5 - 1))
+                        x = int(init_x + (w_interval * i) - 10)
+                        y = int(init_y + (h_interval * j) - 10)
+                        x = 10 if x < 10 else x
+                        x = 630 if x > 630 else x
+                        y = 10 if y < 10 else y
+                        y = 470 if y > 470 else y
+
+                        whiteboard = cv2.circle(whiteboard, (x, y), 7, (0, 0, 255), -1)
+
+                        cv2.namedWindow("whiteboard", cv2.WND_PROP_FULLSCREEN)
+                        cv2.setWindowProperty("whiteboard", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
+                        # cv2.resizeWindow("whiteboard", self.display_label.height(), self.display_label.width())
+                        cv2.imshow("whiteboard", whiteboard)
+                        cv2.setMouseCallback("whiteboard", self.click_event)
+
+                        if self.click_pt:
+                            if abs(self.click_pt[0] - x) < 2 and abs(self.click_pt[1] - y) < 2:
+                                cal_pt = f'cal_{points[n_point]}_{j}_{i}'
+                                print(cal_pt)
+                                '''face landmark vector 저장'''
+                                if boxes.size(0):
+                                    print(abs_land)
+                                    print(f'l_center : {l_center}')
+                                    print(f'r_center : {r_center}')
+                                    print(f'x : {self.click_pt[0]}, y : {self.click_pt[1]}')
+                                    i += 1
+                                    self.click_pt.clear()
+                                else:
+                                    self.click_pt.clear()
+
+                            else:
+                                self.click_pt.clear()
+
 
                     self.showImage(self.frame, self.display_label)
                     cv2.waitKey(1)
@@ -150,6 +214,9 @@ class MyApp(QMainWindow, main_ui):
                     # 비디오가 눌리면 / cam 바뀌면 stop
                     if self.press_esc or self.get_video or self.change_cam:
                         self.cap.release()
+                        break
+
+                    if cv2.waitKey(1) == 27:
                         break
                 else:
                     break
@@ -197,7 +264,10 @@ class MyApp(QMainWindow, main_ui):
                 self.ret, self.frame = self.cap.read()
 
                 if self.ret and not self.video_frame:
-                    self.detect(self.frame, prev_bbox, face_detect, prev_land, land_detect, 2)
+                    boxes, labels, probs, sec1 = get_face(self.face_detector, self.frame)
+
+                    if boxes.size(0):
+                        self.detect(boxes, probs, self.frame, prev_bbox, face_detect, prev_land, land_detect, 2)
 
                     self.showImage(self.frame, self.display_label)
                     cv2.waitKey(1)
@@ -211,55 +281,52 @@ class MyApp(QMainWindow, main_ui):
                     break
 
 
-    def detect(self, frame, prev_bbox, face_detect, prev_land, land_detect, thick):
-        boxes, labels, probs, sec1 = get_face(self.face_detector, frame)
+    def detect(self, boxes, probs, frame, prev_bbox, face_detect, prev_land, land_detect, thick):
+        '''detect face'''
+        box = boxes[0, :]
+        label = f"Face: {probs[0]:.2f}"
+        cur_bbox = add_face_region(box)
+        cur_bbox, prev_bbox, face_detect = low_pass_filter(cur_bbox, prev_bbox, face_detect,
+                                                           mode='face')
+        x1, x2, y1, y2 = cur_bbox
 
-        if boxes.size(0):
-            '''detect face'''
-            box = boxes[0, :]
-            label = f"Face: {probs[0]:.2f}"
-            cur_bbox = add_face_region(box)
-            cur_bbox, prev_bbox, face_detect = low_pass_filter(cur_bbox, prev_bbox, face_detect,
-                                                               mode='face')
-            x1, x2, y1, y2 = cur_bbox
+        '''detect landmark'''
+        face_box = dlib.rectangle(left=cur_bbox[0], top=cur_bbox[2], right=cur_bbox[1],
+                                  bottom=cur_bbox[3])
+        cur_land = self.land_detector(frame, face_box)
+        cur_land = cvt_shape_to_np(cur_land, land_add=self.land_thres)
+        cur_land, prev_land, land_detect = low_pass_filter(cur_land, prev_land, land_detect, mode='landmark')
+        cur_rel_coord = cvt_land_rel(cur_land, cur_bbox)
 
-            '''detect landmark'''
-            face_box = dlib.rectangle(left=cur_bbox[0], top=cur_bbox[2], right=cur_bbox[1],
-                                      bottom=cur_bbox[3])
-            cur_land = self.land_detector(self.frame, face_box)
-            cur_land = cvt_shape_to_np(cur_land, land_add=self.land_thres)
-            cur_land, prev_land, land_detect = low_pass_filter(cur_land, prev_land, land_detect, mode='landmark')
-            cur_rel_coord = cvt_land_rel(cur_land, cur_bbox)
+        '''eyeball'''
+        face = frame[y1:y2, x1:x2].copy()
+        face = cv2.resize(face, (300, 300))
 
-            '''eyeball'''
-            face = self.frame[y1:y2, x1:x2].copy()
-            face = cv2.resize(face, (300, 300))
+        abs_land = (cur_rel_coord * face_size).astype(np.int)
 
-            abs_land = (cur_rel_coord * face_size).astype(np.int)
+        mask = np.zeros(face.shape[:2], dtype=np.uint8)
+        mask = eye_on_mask(abs_land, mask, left_eye)
+        mask = eye_on_mask(abs_land, mask, right_eye)
+        kernel = np.ones((9, 9), np.uint8)
+        mask = cv2.dilate(mask, kernel, 5)
+        eyes = cv2.bitwise_and(face, face, mask=mask)
+        mask = (eyes == [0, 0, 0]).all(axis=2)
+        eyes[mask] = [255, 255, 255]
+        eyes_gray = cv2.cvtColor(eyes, cv2.COLOR_BGR2GRAY)
 
-            mask = np.zeros(face.shape[:2], dtype=np.uint8)
-            mask = eye_on_mask(abs_land, mask, left_eye)
-            mask = eye_on_mask(abs_land, mask, right_eye)
-            kernel = np.ones((9, 9), np.uint8)
-            mask = cv2.dilate(mask, kernel, 5)
-            eyes = cv2.bitwise_and(face, face, mask=mask)
-            mask = (eyes == [0, 0, 0]).all(axis=2)
-            eyes[mask] = [255, 255, 255]
-            eyes_gray = cv2.cvtColor(eyes, cv2.COLOR_BGR2GRAY)
+        _, thresh = cv2.threshold(eyes_gray, self.threshold, 255, cv2.THRESH_BINARY)
+        thresh = cv2.erode(thresh, None, iterations=2)
+        thresh = cv2.dilate(thresh, None, iterations=4)
+        thresh = cv2.medianBlur(thresh, 3)
+        thresh = cv2.bitwise_not(thresh)
+        mid = (abs_land[42][0] + abs_land[39][0]) // 2
+        l_center = contouring(thresh[:, 0:mid], mid, face)
+        r_center = contouring(thresh[:, mid:], mid, face, True)
 
-            _, thresh = cv2.threshold(eyes_gray, self.threshold, 255, cv2.THRESH_BINARY)
-            thresh = cv2.erode(thresh, None, iterations=2)
-            thresh = cv2.dilate(thresh, None, iterations=4)
-            thresh = cv2.medianBlur(thresh, 3)
-            thresh = cv2.bitwise_not(thresh)
-            mid = (abs_land[42][0] + abs_land[39][0]) // 2
-            l_center = contouring(thresh[:, 0:mid], mid, face)
-            r_center = contouring(thresh[:, mid:], mid, face, True)
+        cv2.imshow('image', thresh)
 
-            cv2.imshow('image', thresh)
-
-            if self.check_pupil() == True:
-            #     if 0 not in centers[0] and 0 not in centers[1]:
+        if self.check_pupil() == True:
+            if 0 not in l_center and 0 not in r_center:
                 l_center = np.array(l_center) / face.shape[0]
                 r_center = np.array(r_center) / face.shape[0]
                 frame = cv2.circle(frame, (int(l_center[0] * (x2 - x1) + x1), int(l_center[1] * (y2 - y1) + y1)), 2,
@@ -267,17 +334,18 @@ class MyApp(QMainWindow, main_ui):
                 frame = cv2.circle(frame, (int(r_center[0] * (x2 - x1) + x1), int(r_center[1] * (y2 - y1) + y1)), 2,
                                    (255, 255, 255), -1)
 
-            if self.check_face() == True:
-                frame = cv2.rectangle(frame, (x1, y1), (x2, y2), (128, 0, 255), 4)
-                frame = cv2.putText(frame, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                                         (255, 255, 255), 2)
+        if self.check_face() == True:
+            frame = cv2.rectangle(frame, (x1, y1), (x2, y2), (128, 0, 255), 4)
+            frame = cv2.putText(frame, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                     (255, 255, 255), 2)
 
-            if self.check_land() == True:
-                frame = draw_land(frame, cur_land, (0, 0, 255), thick)
-                # for i in range(68):
-                #     x, y = cur_land.part(i).x, cur_land.part(i).y
-                #     cv2.circle(frame, (x, y), thick, (0, 0, 255), -1)
+        if self.check_land() == True:
+            frame = draw_land(frame, cur_land, (0, 0, 255), thick)
+            # for i in range(68):
+            #     x, y = cur_land.part(i).x, cur_land.part(i).y
+            #     cv2.circle(frame, (x, y), thick, (0, 0, 255), -1)
 
+        return abs_land, l_center, r_center
 
     def showImage(self, img, display_label):
         draw_img = img.copy()
@@ -297,7 +365,7 @@ class MyApp(QMainWindow, main_ui):
         qr.moveCenter(cp)
         self.move(qr.topLeft())
 
-    def prgram_exit(self):
+    def program_exit(self):
         self.press_esc = True
         QCoreApplication.instance().quit()
 
