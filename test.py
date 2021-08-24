@@ -9,7 +9,9 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 
-import torch
+
+from sklearn.linear_model import LinearRegression
+from collections import defaultdict
 
 from util import *
 
@@ -31,6 +33,11 @@ class MyApp(QMainWindow, main_ui):
         # 변수 초기화
         self.init_dir = '../../'
         self.video_path = []
+        self.click_pt = []
+        self.reg = LinearRegression()
+        self.vector = None
+        self.vectors = defaultdict(list)
+        self.gaze = None
 
         self.face_detector = face_detector_loader(pth_path)
         self.land_detector = dlib.shape_predictor(dat_path)
@@ -46,9 +53,10 @@ class MyApp(QMainWindow, main_ui):
         self.face_check = None
         self.land_check = None
         self.calibration = False
-        self.threshold = 0
-        self.land_thres = 0
-        self.click_pt = []
+        self.complete = False
+        self.threshold = 35
+        self.land_thres = 4
+
 
         # 버튼에 기능 연결
         self.cam_comboBox.currentIndexChanged.connect(self.camSetting_combo) # 캠 번호
@@ -63,6 +71,7 @@ class MyApp(QMainWindow, main_ui):
         self.face_checkBox.stateChanged.connect(self.check_face)
         self.land_checkBox.stateChanged.connect(self.check_land)
         self.pupil_checkBox.stateChanged.connect(self.check_pupil)
+        self.gaze_checkBox.stateChanged.connect(self.check_gaze)
 
         # slider
         self.thres_horizontalSlider.setValue(self.threshold)
@@ -92,6 +101,12 @@ class MyApp(QMainWindow, main_ui):
     def calibration_button(self):
         self.calibration = True
 
+    # def calibrate(self, n_point, i, j, boxes, l_center, r_center):
+    #     while True:
+    #         self.ret, self.frame = self.cap.read()
+    #         if self.ret:
+
+
     def check_face(self):
         if self.face_checkBox.isChecked():
             return True
@@ -106,6 +121,12 @@ class MyApp(QMainWindow, main_ui):
 
     def check_pupil(self):
         if self.pupil_checkBox.isChecked():
+            return True
+        else:
+            return False
+
+    def check_gaze(self):
+        if self.gaze_checkBox.isChecked():
             return True
         else:
             return False
@@ -143,6 +164,11 @@ class MyApp(QMainWindow, main_ui):
             self.startCamera()
             print('camera stop')
 
+    def compute(self, vector):
+        np_vector = np.array([vector])
+        np_gaze = self.reg.predict(np_vector)
+
+        return np_gaze
 
     def startCamera(self):
         self.get_cam = True
@@ -151,6 +177,7 @@ class MyApp(QMainWindow, main_ui):
             face_detect, land_detect = False, False
             prev_bbox, prev_land = [], []
             n_point, i, j = 0, 0, 0
+            enough = 0
 
             while True:
                 self.ret, self.frame = self.cap.read()
@@ -160,53 +187,102 @@ class MyApp(QMainWindow, main_ui):
                     if boxes.size(0):
                         abs_land, l_center, r_center = self.detect(boxes, probs, self.frame, prev_bbox, face_detect, prev_land, land_detect, 1)
 
-                    if self.calibration == True:
-                        if j >= int(points[n_point] ** 0.5):
-                            j = 0
-                            n_point += 1
-                            if n_point > 2:
-                                cv2.destroyAllWindows()
-                        if i >= int(points[n_point] ** 0.5):
-                            i = 0
-                            j += 1
+                        if self.calibration == True:
+                            if j >= int(points[n_point] ** 0.5):
+                                j = 0
+                                n_point += 1
+                            if i >= int(points[n_point] ** 0.5):
+                                i = 0
+                                j += 1
 
-                        whiteboard = np.ones((480, 640, 3))
+                            whiteboard = np.ones((480, 640, 3))
 
-                        w_interval = (640 // (points[n_point] ** 0.5 - 1))
-                        h_interval = (480 // (points[n_point] ** 0.5 - 1))
-                        x = int(init_x + (w_interval * i) - 10)
-                        y = int(init_y + (h_interval * j) - 10)
-                        x = 10 if x < 10 else x
-                        x = 630 if x > 630 else x
-                        y = 10 if y < 10 else y
-                        y = 470 if y > 470 else y
+                            w_interval = (640 // (points[n_point] ** 0.5 - 1))
+                            h_interval = (480 // (points[n_point] ** 0.5 - 1))
+                            x = int(init_x + (w_interval * i) - 10)
+                            y = int(init_y + (h_interval * j) - 10)
+                            x = 10 if x < 10 else x
+                            x = 630 if x > 630 else x
+                            y = 10 if y < 10 else y
+                            y = 470 if y > 470 else y
 
-                        whiteboard = cv2.circle(whiteboard, (x, y), 7, (0, 0, 255), -1)
+                            whiteboard = cv2.circle(whiteboard, (x, y), 7, (0, 0, 255), -1)
 
-                        cv2.namedWindow("whiteboard", cv2.WND_PROP_FULLSCREEN)
-                        cv2.setWindowProperty("whiteboard", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
-                        # cv2.resizeWindow("whiteboard", self.display_label.height(), self.display_label.width())
-                        cv2.imshow("whiteboard", whiteboard)
-                        cv2.setMouseCallback("whiteboard", self.click_event)
+                            cv2.namedWindow("whiteboard", cv2.WND_PROP_FULLSCREEN)
+                            cv2.setWindowProperty("whiteboard", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+                            # cv2.resizeWindow("whiteboard", self.display_label.height(), self.display_label.width())
+                            cv2.imshow("whiteboard", whiteboard)
+                            cv2.setMouseCallback("whiteboard", self.click_event)
 
-                        if self.click_pt:
-                            if abs(self.click_pt[0] - x) < 2 and abs(self.click_pt[1] - y) < 2:
-                                cal_pt = f'cal_{points[n_point]}_{j}_{i}'
-                                print(cal_pt)
-                                '''face landmark vector 저장'''
-                                if boxes.size(0):
-                                    print(abs_land)
-                                    print(f'l_center : {l_center}')
-                                    print(f'r_center : {r_center}')
-                                    print(f'x : {self.click_pt[0]}, y : {self.click_pt[1]}')
-                                    i += 1
-                                    self.click_pt.clear()
+                            if cv2.waitKey(1) == 27:
+                                cv2.destroyWindow("whiteboard")
+                                self.calibration = False
+
+                            if self.click_pt:
+                                if abs(self.click_pt[0] - x) < 2 and abs(self.click_pt[1] - y) < 2:
+                                    cal_pt = f'cal_{points[n_point]}_{j}_{i}'
+                                    print(cal_pt)
+                                    '''face landmark vector 저장'''
+                                    if boxes.size(0):
+                                        # print(abs_land)
+                                        print(f'l_center : {l_center}')
+                                        print(f'r_center : {r_center}')
+                                        print(f'x : {self.click_pt[0]}, y : {self.click_pt[1]}')
+                                        i += 1
+                                        self.vector = (l_center + r_center)
+                                        print(self.vector, self.click_pt)
+                                        if self.vector:
+                                            self.vectors[self.vector].append(self.click_pt)  # vector랑 click_pt랑 바꾸면 안됨
+                                            enough += 1
+
+                                        self.click_pt = []
+                                #         self.click_pt.clear()
+                                #     else:
+                                #         self.click_pt.clear()
+                                #
                                 else:
-                                    self.click_pt.clear()
+                                    self.click_pt= []
 
-                            else:
-                                self.click_pt.clear()
+                            if enough >= 16:
+                                cv2.destroyWindow("whiteboard")
+                                self.calibration = False
+                                self.complete = True
 
+
+                        if self.complete == True:
+                            all_v = []
+                            all_p = []
+                            print(self.vectors)
+                            for vector, point in self.vectors.items():
+                                v = np.array(vector)
+                                p = np.array(point[0])
+                                # print(v, p)
+                                all_v.append(v)
+                                all_p.append(p)
+                            #     all_v = np.concatenate((all_v, v))
+                            #     all_p = np.concatenate((all_p, p))
+                            # print(all_v, all_p)
+
+                            self.reg.fit(all_v, all_p)
+                            self.complete = False
+
+                            # print(self.reg.score(all_v, all_p))
+
+                        if self.check_gaze() == True:
+                            self.gaze = self.compute((l_center + r_center))
+
+                            gaze_x, gaze_y = self.gaze[0][0], self.gaze[0][1]
+                            gaze_x = 10 if gaze_x < 10 else gaze_x
+                            gaze_x = 630 if gaze_x > 630 else gaze_x
+                            gaze_y = 10 if gaze_y < 10 else gaze_y
+                            gaze_y = 470 if gaze_y > 470 else gaze_y
+                            gaze_x = int(gaze_x / 630 * self.display_label.width())
+                            gaze_y = int(gaze_y / 470 * self.display_label.height())
+                            self.frame = cv2.circle(self.frame, 50, 50, 4, (0, 0, 255), -1)
+
+                            # print('1 :', int(self.gaze[0][0]), int(self.gaze[0][1]))
+                            # print('2: ', gaze_x, gaze_y)
+                            # self.frame = cv2.circle(self.frame, gaze_x, gaze_y, 4, (0, 0, 255), -1)
 
                     self.showImage(self.frame, self.display_label)
                     cv2.waitKey(1)
@@ -214,9 +290,6 @@ class MyApp(QMainWindow, main_ui):
                     # 비디오가 눌리면 / cam 바뀌면 stop
                     if self.press_esc or self.get_video or self.change_cam:
                         self.cap.release()
-                        break
-
-                    if cv2.waitKey(1) == 27:
                         break
                 else:
                     break
