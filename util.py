@@ -8,10 +8,12 @@ from model.ssd import SSD, Predictor
 
 import torch
 
+from PyQt5.QtGui import *
+
 # setting
 face_size = 300
 bbox_region = {'forehead': 35, 'chin': 0, 'add_face_width': 10}
-filters = {'bbox': 15, 'landmark': 3}
+filters = {'bbox': 20, 'landmark': 3, 'center': 2}
 
 left_eye = [36, 37, 38, 39, 40, 41]
 right_eye = [42, 43, 44, 45, 46, 47]
@@ -20,6 +22,9 @@ eye_bottom = [40, 41, 46, 47]
 eye_side_left = [36, 42]
 eye_side_right = [39, 45]
 
+points = [25]
+# points = [9, 16, 25]
+init_x, init_y = 10, 10
 
 def nothing(x):
     pass
@@ -93,6 +98,30 @@ def low_pass_filter(cur, prev, detect, mode=None):
 
     return cur, prev, detect
 
+def low_pass_filter_eyecenter(cur, prev, detect):
+    if detect:
+        if abs(prev[0] - cur[0]) < filters['center']:
+            cur[0] = prev[0]
+        else:
+            prev[0] = cur[0]
+        if abs(prev[1] - cur[1]) < filters['center']:
+            cur[1] = prev[1]
+        else:
+            prev[1] = cur[1]
+        if abs(prev[2] - cur[2]) < filters['center']:
+            cur[2] = prev[2]
+        else:
+            prev[2] = cur[2]
+        if abs(prev[3] - cur[3]) < filters['center']:
+            cur[3] = prev[3]
+        else:
+            prev[3] = cur[3]
+
+    else:
+        detect = True
+        prev = cur
+
+    return cur, prev, detect
 
 def get_landmark(detector, ori_img, bbox):
     if ori_img.shape[-1] == 3:
@@ -174,6 +203,18 @@ def eye_on_mask(landmarks, mask, side):
     mask = cv2.fillConvexPoly(mask, points, 255)
     return mask
 
+def cvtPixmap(frame, img_size):
+    frame = cv2.resize(frame, img_size)
+    height, width, channel = frame.shape
+    bytesPerLine = 3 * width
+    qImg = QImage(frame.data,
+                  width,
+                  height,
+                  bytesPerLine,
+                  QImage.Format_RGB888).rgbSwapped()
+    qpixmap = QPixmap.fromImage(qImg)
+
+    return qpixmap
 
 def contouring(thresh, mid, img, right=False):
     cx, cy = 0, 0
