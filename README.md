@@ -1,4 +1,4 @@
-# Face, Landmark, gaze detect SW
+# Face, Landmark, iris center detect and gaze tracking SW
 
 ## Description
 
@@ -7,9 +7,8 @@ Pyqt를 사용한 얼굴, 랜드마크, 홍채 중심 검출과 시선 추적이
 > 실시간 & 비디오 가능   
 비디오의 경우에는 시선 추적 기능이 불가능
 
-![startimg](start.png)
 
-#### <under>기능 4가지</under>
+#### 기능 4가지
 
 - 얼굴 검출
     - WIDER FACE dataset을 사용하여 학습
@@ -23,3 +22,4 @@ Pyqt를 사용한 얼굴, 랜드마크, 홍채 중심 검출과 시선 추적이
   
 
 ## Demo
+![demo](demo_video.gif)
