@@ -22,9 +22,10 @@ eye_bottom = [40, 41, 46, 47]
 eye_side_left = [36, 42]
 eye_side_right = [39, 45]
 
-points = [25]
+points = [9]
 # points = [9, 16, 25]
 init_x, init_y = 10, 10
+
 
 def nothing(x):
     pass
@@ -98,6 +99,7 @@ def low_pass_filter(cur, prev, detect, mode=None):
 
     return cur, prev, detect
 
+
 def low_pass_filter_eyecenter(cur, prev, detect):
     if detect:
         if abs(prev[0] - cur[0]) < filters['center']:
@@ -122,17 +124,6 @@ def low_pass_filter_eyecenter(cur, prev, detect):
         prev = cur
 
     return cur, prev, detect
-
-def get_landmark(detector, ori_img, bbox):
-    if ori_img.shape[-1] == 3:
-        ori_img = cv2.cvtColor(ori_img, cv2.COLOR_BGR2GRAY)
-
-    face_box = dlib.rectangle(left=bbox[0], top=bbox[2], right=bbox[1], bottom=bbox[3])
-    prev_time = time.time()
-    landmark = detector(ori_img, face_box)
-    sec = time.time() - prev_time
-
-    return landmark, sec
 
 
 def cvt_shape_to_np(landmakrs, land_add=0, dtype="int"):
@@ -166,37 +157,6 @@ def cvt_land_rel(land, cur_box):
     return rel_land
 
 
-def draw_land(img, land, color, thick):
-    for (x, y) in land:
-        cv2.circle(img, (x, y), thick, color, -1)
-
-    return img
-
-
-def draw_abs_land(img, land, color, size=None):
-    if size:
-        img = cv2.resize(img, size)
-
-    land[:, 0] = land[:, 0] * img.shape[1]
-    land[:, 1] = land[:, 1] * img.shape[0]
-    land = land.astype(np.int)
-
-    for (x, y) in land:
-        cv2.circle(img, (x, y), 2, color, -1)
-
-    return img
-
-
-def draw_speed(frame_size, sec):
-    notice_board = np.full((600 - frame_size[0], frame_size[1], 3), 0, dtype=np.uint8)
-    cv2.putText(notice_board, f'face detection : {sec[0] * 100:.2}ms', (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                (255, 255, 255), 2)
-    cv2.putText(notice_board, f'landmark detection : {sec[1] * 100:.2}ms', (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
-                (255, 255, 255), 2)
-
-    return notice_board
-
-
 def eye_on_mask(landmarks, mask, side):
     points = [landmarks[i] for i in side]
     points = np.array(points, dtype=np.int32)
@@ -216,6 +176,7 @@ def cvtPixmap(frame, img_size):
 
     return qpixmap
 
+
 def contouring(thresh, mid, img, right=False):
     cx, cy = 0, 0
     cnts, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -232,57 +193,3 @@ def contouring(thresh, mid, img, right=False):
         pass
 
     return cx, cy
-
-
-def get_eye_box_coord(rel_land, mode=None):
-    abs_land = (rel_land * face_size).astype(np.int)
-
-    min_x, min_y, max_x, max_y = face_size, face_size, 0, 0
-    if mode == 'right':
-        eye_idx = right_eye
-    elif mode == 'left':
-        eye_idx = left_eye
-    else:
-        print(f'Error : get_eye_box_coord function')
-        eye_idx = []
-
-    for idx in eye_idx:
-        min_x = abs_land[idx][0] if min_x > abs_land[idx][0] else min_x
-        min_y = abs_land[idx][1] if min_y > abs_land[idx][1] else min_y
-        max_x = abs_land[idx][0] if max_x < abs_land[idx][0] else max_x
-        max_y = abs_land[idx][1] if max_y < abs_land[idx][1] else max_y
-
-    return min_x, min_y, max_x, max_y
-
-
-def get_eye_centers(face, rel_land):
-    abs_land = (rel_land * face_size).astype(np.int)
-    r_min_x, r_min_y, r_max_x, r_max_y = get_eye_box_coord(rel_land, mode='right')
-    l_min_x, l_min_y, l_max_x, l_max_y = get_eye_box_coord(rel_land, mode='left')
-
-    mask = np.zeros(face.shape[:2], dtype=np.uint8)
-    mask = eye_on_mask(abs_land, mask, left_eye)
-    mask = eye_on_mask(abs_land, mask, right_eye)
-    kernel = np.ones((9, 9), np.uint8)
-    mask = cv2.dilate(mask, kernel, 5)
-
-    face_gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
-    face_gray[r_min_y:r_max_y, r_min_x:r_max_x] = cv2.equalizeHist(face_gray[r_min_y:r_max_y, r_min_x:r_max_x])
-    face_gray[l_min_y:l_max_y, l_min_x:l_max_x] = cv2.equalizeHist(face_gray[l_min_y:l_max_y, l_min_x:l_max_x])
-    face_gray = cv2.cvtColor(face_gray, cv2.COLOR_GRAY2BGR)
-    eyes = cv2.bitwise_and(face_gray, face_gray, mask=mask)
-    mask = (eyes == [0, 0, 0]).all(axis=2)
-    eyes[mask] = [255, 255, 255]
-    eyes_gray = cv2.cvtColor(eyes, cv2.COLOR_BGR2GRAY)
-    threshold = cv2.getTrackbarPos('threshold', 'annotated')
-    _, thresh = cv2.threshold(eyes_gray, threshold, 255, cv2.THRESH_BINARY)
-    thresh = cv2.erode(thresh, None, iterations=2)
-    thresh = cv2.dilate(thresh, None, iterations=4)
-    thresh = cv2.medianBlur(thresh, 3)
-    thresh = cv2.bitwise_not(thresh)
-
-    mid = (abs_land[42][0] + abs_land[39][0]) // 2
-    l_center = contouring(thresh[:, 0:mid], mid, face)
-    r_center = contouring(thresh[:, mid:], mid, face, True)
-
-    return (l_center, r_center), cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)

@@ -14,6 +14,7 @@ from collections import defaultdict
 
 from util import *
 
+
 main_ui = uic.loadUiType('sw_window.ui')[0]
 fourcc = cv2.VideoWriter_fourcc(*'DIVX')
 
@@ -49,7 +50,7 @@ class MyApp(QMainWindow, main_ui):
         self.face_check = None
         self.land_check = None
         self.calibration = False
-        self.complete = False
+        self.cali_complete = False
         self.threshold = 50
         self.land_thres = 4
 
@@ -63,6 +64,7 @@ class MyApp(QMainWindow, main_ui):
         self.cali_pushButton.clicked.connect(self.calibration_button)  # calibration 버튼
 
         # 체크박스
+        self.gaze_checkBox.setEnabled(False)
         self.face_checkBox.stateChanged.connect(self.check_face)
         self.land_checkBox.stateChanged.connect(self.check_land)
         self.pupil_checkBox.stateChanged.connect(self.check_pupil)
@@ -79,6 +81,16 @@ class MyApp(QMainWindow, main_ui):
         self.landthres_horizontalSlider.valueChanged.connect(self.landthres_slider)
 
         self.exit_Button.clicked.connect(self.program_exit)  # 종료 버튼
+
+    def initUI(self):
+        self.setWindowTitle('detection')
+        # self.setWindowIcon()
+        self.cam_comboBox.addItem('0')
+        self.cam_comboBox.addItem('1')
+        self.cam_comboBox.addItem('2')
+        self.cam_comboBox.addItem('3')
+        self.center()
+        self.show()
 
     def thres_slider(self):
         self.threshold = self.thres_horizontalSlider.value()
@@ -120,16 +132,6 @@ class MyApp(QMainWindow, main_ui):
         else:
             return False
 
-    def initUI(self):
-        self.setWindowTitle('detection')
-        # self.setWindowIcon()
-        self.cam_comboBox.addItem('0')
-        self.cam_comboBox.addItem('1')
-        self.cam_comboBox.addItem('2')
-        self.cam_comboBox.addItem('3')
-        self.center()
-        self.show()
-
     def camSetting_combo(self):
         self.change_cam = True
         self.cam_num = int(self.cam_comboBox.currentText())
@@ -146,8 +148,6 @@ class MyApp(QMainWindow, main_ui):
             self.cam_message.setIcon(QMessageBox.Information)
             self.cam_message.setText('This cam is not work')
             self.cam_message.setStandardButtons(QMessageBox.Ok)
-            retval = self.cam_message.exec_()
-
             self.cap = None
         else:
             self.startCamera()
@@ -156,7 +156,6 @@ class MyApp(QMainWindow, main_ui):
     def compute(self, vector):
         np_vector = np.array([vector])
         np_gaze = self.reg.predict(np_vector)
-        print(self.reg.coef_)
 
         return np_gaze
 
@@ -167,18 +166,107 @@ class MyApp(QMainWindow, main_ui):
 
         return gaze
 
+    def gaze_tracking(self, cur_center, type='full'):
+        width = self.display_label.width()
+        height = self.display_label.height()
+
+        gaze = self.get_gaze(cur_center)
+
+        gaze_x, gaze_y = gaze[0][0], gaze[0][1]
+
+        gaze_x = 1 if gaze_x > 1 else gaze_x
+        gaze_y = 1 if gaze_y > 1 else gaze_y
+        gaze_x = 0 if gaze_x < 0 else gaze_x
+        gaze_y = 0 if gaze_y < 0 else gaze_y
+
+        # 전체 이미지
+        if type == 'full':
+            gaze_x = int(gaze_x * width - 10)
+            gaze_y = int(gaze_y * height - 10)
+
+            print('center: ', cur_center, 'predict: ', (gaze_x, gaze_y))
+            gaze_x = 10 if gaze_x < 10 else gaze_x
+            gaze_x = width - 30 if gaze_x > width - 30 else gaze_x
+            gaze_y = 10 if gaze_y < 10 else gaze_y
+            gaze_y = height - 30 if gaze_y > height - 30 else gaze_y
+
+            # 전체 이미지에서 뿌리기기
+            frame = cv2.resize(self.frame, (height, width))
+            frame = cv2.flip(frame, 1)
+            frame = cv2.circle(frame, (gaze_x, gaze_y), 10, (0, 0, 255), -1)
+
+            cv2.namedWindow("gaze_whiteboard", cv2.WND_PROP_FULLSCREEN)
+            cv2.setWindowProperty("gaze_whiteboard", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+            cv2.imshow("gaze_whiteboard", frame)
+
+            if cv2.waitKey(1) == 27:
+                self.gaze_checkBox.toggle()
+                cv2.destroyWindow("gaze_whiteboard")
+
+        else:
+            # pyqt
+            gaze_x = int(gaze_x * width)
+            gaze_y = int(gaze_y * height)
+            gaze_x = 10 if gaze_x < 10 else gaze_x
+            gaze_x = width - 30 if gaze_x > width - 30 else gaze_x
+            gaze_y = 10 if gaze_y < 10 else gaze_y
+            gaze_y = height - 30 if gaze_y > height - 30 else gaze_y
+
+            # pyqt에서 뿌리기
+            # self.frame = cv2.resize(self.frame, (height, width))
+            self.frame = cv2.circle(self.frame, (gaze_x, gaze_y), 10, (0, 0, 255), -1)
+
+
+    def calibration_board(self, i, j):
+        width = self.display_label.width()
+        height = self.display_label.height()
+
+        whiteboard = np.ones((height, width, 3))
+
+        w_interval = (width // (points[0] ** 0.5 - 1))
+        h_interval = (height // (points[0] ** 0.5 - 1))
+        x = int(init_x + (w_interval * i) - 10)
+        y = int(init_y + (h_interval * j) - 10)
+        x = 10 if x < 10 else x
+        x = width - 10 if x > width - 10 else x
+        y = 10 if y < 10 else y
+        y = height - 10 if y > height - 10 else y
+
+        whiteboard = cv2.circle(whiteboard, (x, y), 10, (0, 0, 255), -1)
+
+        cv2.namedWindow("whiteboard", cv2.WND_PROP_FULLSCREEN)
+        cv2.setWindowProperty("whiteboard", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        cv2.imshow("whiteboard", whiteboard)
+        cv2.setMouseCallback("whiteboard", self.click_event)
+
+        if cv2.waitKey(1) == 27:
+            cv2.destroyWindow("whiteboard")
+            self.calibration = False
+
+        return x, y
+
+    def regression_model(self):
+        all_v = []
+        all_p = []
+
+        for eye_cor, point in self.vectors.items():
+            eye = np.array(eye_cor)
+            pt = np.array(point[0])
+
+            all_v.append(eye)
+            all_p.append(pt)
+
+        self.reg.fit(all_v, all_p)
+        self.cali_complete = False
+
     def startCamera(self):
         self.get_cam = True
 
         if self.cap:
-            face_detect, land_detect, eye_detect = False, False, False
             prev_bbox, prev_land, prev_center = [0, 0, 0, 0], np.zeros((68, 2)), [0, 0, 0, 0]
-            n_point, i, j = 0, 0, 0
-            enough = 0
             width = self.display_label.width()
             height = self.display_label.height()
-            display_width = 960
-            display_height = 540
+            n_point, i, j, enough = 0, 0, 0, 0
 
             while True:
                 self.ret, self.frame = self.cap.read()
@@ -186,149 +274,58 @@ class MyApp(QMainWindow, main_ui):
                     boxes, labels, probs, sec1 = get_face(self.face_detector, self.frame)
 
                     if boxes.size(0):
+                        label = f"Face: {probs[0]:.2f}"
                         face_detect, land_detect, eye_detect = True, True, True
+                        cur_bbox = self.detect_face(boxes, prev_bbox, face_detect)
+                        cur_land = self.detect_lands(self.frame, cur_bbox, prev_land, land_detect)
+                        cur_center = self.detect_eyeball(self.frame, cur_bbox, cur_land, prev_center, eye_detect)
 
-                        abs_land, cur_center = self.detect(boxes, probs, self.frame, prev_bbox, face_detect,
-                                                                   prev_land, land_detect, 1, prev_center, eye_detect)
+                        self.draw(self.frame, label, cur_bbox, cur_land, cur_center, 1)
+
                         cur_center = np.array(cur_center)
                         cur_center = [cur_center[0] / width, cur_center[1] / height,
                                       cur_center[2] / width, cur_center[3] / height]
 
-                        # l_center = tuple(l_center)
-                        # r_center = tuple(r_center)
-
-
+                        # 캘리브레이션
                         if self.calibration == True:
+                            self.gaze_checkBox.setEnabled(True)
                             if j >= int(points[n_point] ** 0.5):
                                 j = 0
-                                n_point += 1
                             if i >= int(points[n_point] ** 0.5):
                                 i = 0
                                 j += 1
 
-                            whiteboard = np.ones((height, width, 3))
+                            x, y = self.calibration_board(i, j)
 
-                            w_interval = (width // (points[n_point] ** 0.5 - 1))
-                            h_interval = (height // (points[n_point] ** 0.5 - 1))
-                            x = int(init_x + (w_interval * i) - 10)
-                            y = int(init_y + (h_interval * j) - 10)
-                            x = 10 if x < 10 else x
-                            x = width - 10 if x > width - 10 else x
-                            y = 10 if y < 10 else y
-                            y = height - 10 if y > height - 10 else y
-
-                            whiteboard = cv2.circle(whiteboard, (x, y), 12, (0, 0, 255), -1)
-
-                            cv2.namedWindow("whiteboard", cv2.WND_PROP_FULLSCREEN)
-                            cv2.setWindowProperty("whiteboard", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-                            # cv2.resizeWindow("whiteboard", self.display_label.height(), self.display_label.width())
-                            cv2.imshow("whiteboard", whiteboard)
-                            cv2.setMouseCallback("whiteboard", self.click_event)
-
-                            if cv2.waitKey(1) == 27:
-                                cv2.destroyWindow("whiteboard")
-                                self.calibration = False
-
+                            # 클릭 포인트 저장
                             if self.click_pt:
-                                if abs(self.click_pt[0] - x) < 8 and abs(self.click_pt[1] - y) < 8:
-                                    cal_pt = f'cal_{points[n_point]}_{j}_{i}'
+                                if abs(self.click_pt[0] - x) < 10 and abs(self.click_pt[1] - y) < 10:
+                                    cal_pt = f'cal_{points[0]}_{j}_{i}'
                                     print(cal_pt)
-                                    '''face landmark vector 저장'''
-                                    if boxes.size(0):
-                                        # print(abs_land)
-                                        # print(f'l_center : {l_center}')
-                                        # print(f'r_center : {r_center}')
-                                        print(f'center: {cur_center}')
-                                        print(f'x : {self.click_pt[0]}, y : {self.click_pt[1]}')
-                                        i += 1
+                                    print(f'center: {cur_center}')
+                                    print(f'x : {self.click_pt[0]}, y : {self.click_pt[1]}')
+                                    i += 1
 
-                                        self.click_pt = (self.click_pt[0] / width, self.click_pt[1] / height)
-                                        # self.vectors[self.centers].append(self.click_pt)
-                                        self.vectors[tuple(cur_center)].append(self.click_pt)
-                                        enough += 1
+                                    self.click_pt = (self.click_pt[0] / width, self.click_pt[1] / height)
+                                    self.vectors[tuple(cur_center)].append(self.click_pt)
+                                    enough += 1
 
-                                        self.click_pt = []
-                                    else:
-                                        self.click_pt = []
-
+                                    self.click_pt = []
                                 else:
                                     self.click_pt = []
 
-                            if enough >= points[n_point]:
+                            if enough >= points[0]:
                                 cv2.destroyWindow("whiteboard")
                                 self.calibration = False
-                                self.complete = True
+                                self.cali_complete = True
 
+                        # 선형 회귀 모델로 학습
+                        if self.cali_complete == True:
+                            self.regression_model()
 
-                        if self.complete == True:
-                            all_v = []
-                            all_p = []
-
-                            print(self.vectors)
-                            for eye_cor, point in self.vectors.items():
-                                eye = np.array(eye_cor)
-                                pt = np.array(point[0])
-
-                                all_v.append(eye)
-                                all_p.append(pt)
-
-                            print('eye: ', all_v)
-                            print('point: ', all_p)
-                            self.reg.fit(all_v, all_p)
-                            self.complete = False
-
-                        if self.check_gaze() == True and self.vectors:
-
-                            gaze = self.get_gaze(cur_center)
-
-                            gaze_x, gaze_y = gaze[0][0], gaze[0][1]
-
-                            # gaze_x = 1 if gaze_x > 1 else gaze_x
-                            # gaze_y = 1 if gaze_y > 1 else gaze_y
-                            # gaze_x = 0 if gaze_x < 0 else gaze_x
-                            # gaze_y = 0 if gaze_y < 0 else gaze_y
-
-                            # pyqt
-                            # gaze_x = int(gaze_x * width)
-                            # gaze_y = int(gaze_y * height)
-                            # gaze_x = 10 if gaze_x < 10 else gaze_x
-                            # gaze_x = width - 30 if gaze_x > width - 30 else gaze_x
-                            # gaze_y = 10 if gaze_y < 10 else gaze_y
-                            # gaze_y = height - 30 if gaze_y > height - 30 else gaze_y
-
-                            # 전체 이미지
-                            gaze_x = int(gaze_x * width - 10)
-                            gaze_y = int(gaze_y * height - 10)
-
-                            print('center: ', cur_center, 'predict: ', (gaze_x, gaze_y))
-                            gaze_x = 10 if gaze_x < 10 else gaze_x
-                            gaze_x = width - 30 if gaze_x > width - 30 else gaze_x
-                            gaze_y = 10 if gaze_y < 10 else gaze_y
-                            gaze_y = height - 30 if gaze_y > height - 30 else gaze_y
-
-                            # pyqt에서 뿌리기
-                            # self.frame = cv2.resize(self.frame, (height, width))
-                            # self.frame = cv2.circle(self.frame, (gaze_x, gaze_y), 10, (0, 0, 255), -1)
-
-                            # 전체 이미지에서 뿌리기기
-                            frame = cv2.resize(self.frame, (height, width))
-                            frame = cv2.flip(frame, 1)
-                            frame = cv2.circle(frame, (gaze_x, gaze_y), 10, (0, 0, 255), -1)
-
-                            cv2.namedWindow("gaze_whiteboard", cv2.WND_PROP_FULLSCREEN)
-                            cv2.setWindowProperty("gaze_whiteboard", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-                            cv2.imshow("gaze_whiteboard", frame)
-                            if cv2.waitKey(1) == 27:
-                                cv2.destroyWindow("gaze_whiteboard")
-
-
-
-                            # gaze_whiteboard = np.ones((480, 640, 3))
-                            # gaze_whiteboard = cv2.circle(gaze_whiteboard, (gaze_x, gaze_y), 5, (0, 0, 255), -1)
-                            #
-                            # cv2.namedWindow("gaze_whiteboard", cv2.WND_PROP_FULLSCREEN)
-                            # cv2.setWindowProperty("gaze_whiteboard", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-                            # cv2.imshow("gaze_whiteboard", gaze_whiteboard)
+                        # gaze tracking 창 띄우기
+                        if self.check_gaze() == True and len(self.vectors) == points[0]:
+                            self.gaze_tracking(cur_center, 'pyqt')
 
 
                     self.showImage(self.frame, self.display_label)
@@ -377,7 +374,6 @@ class MyApp(QMainWindow, main_ui):
 
     def startVideo(self):
         if self.cap:
-            face_detect, land_detect, eye_detect = False, False, False
             prev_bbox, prev_land, prev_center = [0, 0, 0, 0], np.zeros((68, 2)), [0, 0, 0, 0]
 
             while True:
@@ -387,11 +383,13 @@ class MyApp(QMainWindow, main_ui):
                     boxes, labels, probs, sec1 = get_face(self.face_detector, self.frame)
 
                     if boxes.size(0):
+                        label = f"Face: {probs[0]:.2f}"
                         face_detect, land_detect, eye_detect = True, True, True
+                        cur_bbox = self.detect_face(boxes, prev_bbox, face_detect)
+                        cur_land = self.detect_lands(self.frame, cur_bbox, prev_land, land_detect)
+                        cur_center = self.detect_eyeball(self.frame, cur_bbox, cur_land, prev_center, eye_detect)
 
-                        self.detect(boxes, probs, self.frame, prev_bbox, face_detect,
-                                                           prev_land, land_detect, 1, prev_center, eye_detect)
-
+                        self.draw(self.frame, label, cur_bbox, cur_land, cur_center, 2)
 
                     self.showImage(self.frame, self.display_label)
                     cv2.waitKey(1)
@@ -404,24 +402,27 @@ class MyApp(QMainWindow, main_ui):
                 else:
                     break
 
-    def detect(self, boxes, probs, frame, prev_bbox, face_detect, prev_land, land_detect, thick, prev_center, eye_detect):
-        '''detect face'''
+    def detect_face(self, boxes, prev_bbox, face_detect):
         box = boxes[0, :]
-        label = f"Face: {probs[0]:.2f}"
-        cur_bbox = add_face_region(box)
-        cur_bbox, prev_bbox, face_detect = low_pass_filter(cur_bbox, prev_bbox, face_detect,
-                                                           mode='face')
-        x1, x2, y1, y2 = cur_bbox
 
-        '''detect landmark'''
-        face_box = dlib.rectangle(left=cur_bbox[0], top=cur_bbox[2], right=cur_bbox[1],
-                                  bottom=cur_bbox[3])
-        cur_land = self.land_detector(frame, face_box)
+        cur_bbox = add_face_region(box)
+        cur_bbox, prev_bbox, face_detect = low_pass_filter(cur_bbox, prev_bbox, face_detect, mode='face')
+
+        return cur_bbox
+
+    def detect_lands(self, frame, cur_bbox, prev_land, land_detect):
+        gray_img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        face_box = dlib.rectangle(left=cur_bbox[0], top=cur_bbox[2], right=cur_bbox[1], bottom=cur_bbox[3])
+        cur_land = self.land_detector(gray_img, face_box)
         cur_land = cvt_shape_to_np(cur_land, land_add=self.land_thres)
         cur_land, prev_land, land_detect = low_pass_filter(cur_land, prev_land, land_detect, mode='landmark')
+
+        return cur_land
+
+    def detect_eyeball(self, frame, cur_bbox, cur_land, prev_center, eye_detect):
+        x1, x2, y1, y2 = cur_bbox
         cur_rel_coord = cvt_land_rel(cur_land, cur_bbox)
 
-        '''eyeball'''
         face = frame[y1:y2, x1:x2].copy()
         face = cv2.resize(face, (face_size, face_size))
 
@@ -438,11 +439,12 @@ class MyApp(QMainWindow, main_ui):
         eyes_gray = cv2.cvtColor(eyes, cv2.COLOR_BGR2GRAY)
 
         _, thresh = cv2.threshold(eyes_gray, self.threshold, 255, cv2.THRESH_BINARY)
-        cv2.imshow('gray', thresh)
+
         thresh = cv2.erode(thresh, None, iterations=2)
         thresh = cv2.dilate(thresh, None, iterations=4)
         thresh = cv2.medianBlur(thresh, 3)
         thresh = cv2.bitwise_not(thresh)
+        cv2.imshow('image', thresh)
         mid = (abs_land[42][0] + abs_land[39][0]) // 2
         l_center = contouring(thresh[:, 0:mid], mid, face)
         r_center = contouring(thresh[:, mid:], mid, face, True)
@@ -454,10 +456,12 @@ class MyApp(QMainWindow, main_ui):
         pt_r_center = [int(r_center[0] * (x2 - x1) + x1), int(r_center[1] * (y2 - y1) + y1)]
 
         cur_center, prev_cen, land_detect = low_pass_filter_eyecenter(pt_l_center + pt_r_center, prev_center, eye_detect)
-        cv2.imshow('image', thresh)
 
+        return cur_center
+
+    def draw(self, frame, label, cur_bbox, cur_land, cur_center, thick=2):
+        x1, x2, y1, y2 = cur_bbox
         if self.check_pupil() == True:
-            # if l_center and r_center:
             frame = cv2.circle(frame, (cur_center[0], cur_center[1]), 2, (255, 255, 255), -1)
             frame = cv2.circle(frame, (cur_center[2], cur_center[3]), 2, (255, 255, 255), -1)
 
@@ -467,30 +471,13 @@ class MyApp(QMainWindow, main_ui):
                                 (255, 255, 255), 2)
 
         if self.check_land() == True:
-            frame = draw_land(frame, cur_land, (0, 0, 255), thick)
-            # for i in range(68):
-            #     x, y = cur_land.part(i).x, cur_land.part(i).y
-            #     cv2.circle(frame, (x, y), thick, (0, 0, 255), -1)
+            for (x, y) in cur_land:
+                cv2.circle(frame, (x, y), thick, (0, 0, 255), -1)
 
-        # return abs_land, l_center, r_center
-        return abs_land, cur_center
 
     def showImage(self, img, display_label):
         qpixmap = cvtPixmap(img, (display_label.width(), display_label.height()))
         display_label.setPixmap(qpixmap)
-        # draw_img = img.copy()
-        # height = display_label.height()
-        # width = display_label.width()
-        # bytesPerLine = 3 * width
-        #
-        # draw_img = cv2.cvtColor(draw_img, cv2.COLOR_BGR2RGB)
-        # draw_img = cv2.resize(draw_img, (height, width))
-        #
-        # # qt_image = QImage(draw_img.data, width, height, bytesPerLine, QImage.Format_RGB888).rgbSwapped()
-        # qt_image = QImage(draw_img.data, width, height, bytesPerLine, QImage.Format_RGB888)
-        # pixmap = QPixmap.fromImage(qt_image)
-        #
-        # display_label.setPixmap(pixmap)
 
     def center(self):
         qr = self.frameGeometry()
